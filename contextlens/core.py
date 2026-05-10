@@ -277,23 +277,12 @@ class ContextLens:
         return hashlib.md5(content.encode()).hexdigest()
 
     def _print_savings(self, result: CompressionResult) -> None:
-        """Print savings summary to console."""
-        saved_tokens = result.tokens_estimated_saved
-        # Rough cost estimate: £0.003 per 1000 tokens (Sonnet pricing)
-        cost_saved = (saved_tokens / 1000) * 0.003
-        # Rough CO2: ~0.0002g per token on H100
-        co2_saved = saved_tokens * 0.0002
-
-        session_total_saved = (self._session_original_chars - self._session_compressed_chars) // 4
-        session_cost = (session_total_saved / 1000) * 0.003
-
-        print(f"\n{'─'*45}")
+        print(f"\n{'─' * 45}")
         print(f"ContextLens | Call #{self._call_count}")
-        print(f"  Sent:     {result.compressed_chars:,} chars  (↓ from {result.original_chars:,})")
-        print(f"  Saved:    ~{saved_tokens:,} tokens  (~£{cost_saved:.4f})")
-        print(f"  CO₂:      ~{co2_saved:.2f}g avoided")
-        print(f"  Session:  £{session_cost:.4f} saved total")
-        print(f"{'─'*45}\n")
+        print(f"  Original:   {result.original_chars:,} chars (~{result.original_chars // 4:,} tokens est.)")
+        print(f"  Compressed: {result.compressed_chars:,} chars (~{result.compressed_chars // 4:,} tokens est.)")
+        print(f"  Saved:      ~{result.tokens_estimated_saved:,} tokens ({result.redundancy_pct}%)")
+        print(f"{'─' * 45}\n")
 
     @property
     def session_stats(self) -> dict:
