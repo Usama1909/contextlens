@@ -13,7 +13,7 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
-
+from contextlens.triage import SemanticTriage
 
 @dataclass
 class MessageMeta:
@@ -84,6 +84,7 @@ class ContextLens:
 
         # Semantic model (lazy loaded)
         self._embedder = None
+        self._triage = SemanticTriage() if enable_semantic else None
 
     def compress(self, messages: list[dict]) -> CompressionResult:
         """
@@ -110,6 +111,11 @@ class ContextLens:
         original_chars = sum(
             len(str(m.get("content", ""))) for m in messages
         )
+            # Step 1: Semantic triage (if enabled)
+        if self._triage and len(messages) >= 3:
+            current_query = str(messages[-1].get("content", ""))
+            messages, _ = self._triage.apply_triage(messages, current_query)
+        
 
         # Stage 1: Exact deduplication (always runs, ~0ms overhead)
         compressed = self._deduplicate(messages)
