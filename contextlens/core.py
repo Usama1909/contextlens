@@ -108,14 +108,16 @@ class ContextLens:
                 method="none"
             )
 
+        original_messages_snapshot = list(messages)
         original_chars = sum(
-            len(str(m.get("content", ""))) for m in messages
+            len(str(m.get("content", ""))) for m in original_messages_snapshot
         )
-            # Step 1: Semantic triage (if enabled)
+
+        # Step 1: Semantic triage (if enabled)
         if self._triage and len(messages) >= 3:
             current_query = str(messages[-1].get("content", ""))
             messages, _ = self._triage.apply_triage(messages, current_query)
-        
+            
 
         # Stage 1: Exact deduplication (always runs, ~0ms overhead)
         compressed = self._deduplicate(messages)
@@ -134,7 +136,7 @@ class ContextLens:
         tokens_saved = saved // 4
 
         result = CompressionResult(
-            original_messages=messages,
+            original_messages=original_messages_snapshot,
             compressed_messages=compressed,
             original_chars=original_chars,
             compressed_chars=compressed_chars,

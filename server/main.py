@@ -14,7 +14,10 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 import httpx
 import json
+import os
+from pathlib import Path
 from contextlens.core import ContextLens
+from contextlens.router import SmartRouter
 
 app = FastAPI(
     title="ContextLens Proxy",
@@ -26,13 +29,55 @@ app = FastAPI(
 _engines: dict[str, ContextLens] = {}
 
 ANTHROPIC_BASE = "https://api.anthropic.com"
-
+STATS_DIR = Path("stats")
+STATS_DIR.mkdir(exist_ok=True)
+_router = SmartRouter()
 
 def get_engine(api_key: str) -> ContextLens:
     """Get or create a compression engine for this API key."""
     if api_key not in _engines:
-        _engines[api_key] = ContextLens(budget="balanced")
+        _engines[api_key] = ContextLens(
+            budget="balanced",
+            enable_semantic=True
+        )
     return _engines[api_key]
+
+
+def save_stats(api_key: str, stats: dict):
+    """Persist stats to disk so they survive restarts."""
+    # Use hash of key for filename — never store raw API keys
+    import hashlib
+    key_hash = hashlib.md5(api_key.encode()).hexdigest()[:12]
+    stats_file = STATS_DIR / f"{key_hash}.json"
+
+    existing = {}
+    if stats_file.exists():
+        try:
+            existing = json.loads(stats_file.read_text())
+        except Exception:
+            existing = {}
+
+    # Accumulate totals
+    existing["calls"] = stats.get("calls", 0)
+    existing["chars_saved"] = stats.get("chars_saved", 0)
+    existing["tokens_saved_estimate"] = stats.get("tokens_saved_estimate", 0)
+    existing["redundancy_pct"] = stats.get("redundancy_pct", 0)
+
+    stats_file.write_text(json.dumps(existing, indent=2))
+
+
+def load_stats(api_key: str) -> dict:
+    """Load persisted stats for this API key."""
+    import hashlib
+    key_hash = hashlib.md5(api_key.encode()).hexdigest()[:12]
+    stats_file = STATS_DIR / f"{key_hash}.json"
+
+    if stats_file.exists():
+        try:
+            return json.loads(stats_file.read_text())
+        except Exception:
+            pass
+    return {}
 
 
 @app.get("/")
@@ -55,15 +100,21 @@ async def proxy_messages(request: Request):
     """
     Intercept Anthropic messages, compress, forward.
     """
-    # Get the API key from headers
     api_key = request.headers.get("x-api-key", "")
     if not api_key:
         raise HTTPException(status_code=401, detail="Missing x-api-key header")
 
-    # Read the request body
     body = await request.json()
-
-    # Get compression engine for this user
+    # Smart routing — find minimum viable model
+    requested_model = body.get("model", "")
+    if requested_model:
+        routed_model = await _router.route(
+            body.get("messages", []),
+            requested_model,
+            {"anthropic": api_key},
+            force_route=True
+        )
+        body["model"] = routed_model
     engine = get_engine(api_key)
 
     # Compress the messages
@@ -72,14 +123,16 @@ async def proxy_messages(request: Request):
         result = engine.compress(messages)
         body["messages"] = result.compressed_messages
 
-        # Log savings
         if result.tokens_estimated_saved > 0:
             print(
-                f"[ContextLens] Compressed: "
+                f"[ContextLens] "
                 f"{result.original_chars} → {result.compressed_chars} chars | "
                 f"~{result.tokens_estimated_saved} tokens saved | "
                 f"{result.redundancy_pct}% redundancy"
             )
+
+        # Persist stats
+        save_stats(api_key, engine.session_stats)
 
     # Forward to Anthropic
     async with httpx.AsyncClient(timeout=120) as client:
@@ -105,10 +158,21 @@ async def proxy_messages(request: Request):
 async def stats(request: Request):
     """Return compression stats for this API key."""
     api_key = request.headers.get("x-api-key", "")
-    if not api_key or api_key not in _engines:
-        return {"message": "No stats yet — make some API calls first"}
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Missing x-api-key header")
 
-    return _engines[api_key].session_stats
+    # Live stats from memory
+    if api_key in _engines:
+        live = _engines[api_key].session_stats
+        save_stats(api_key, live)
+        return live
+
+    # Persisted stats from disk
+    persisted = load_stats(api_key)
+    if persisted:
+        return persisted
+
+    return {"message": "No stats yet — make some API calls first"}
 
 
 if __name__ == "__main__":
