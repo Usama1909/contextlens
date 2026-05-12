@@ -3,6 +3,12 @@ README.md
 pyproject.toml
 contextlens/__init__.py
 contextlens/core.py
+contextlens/router.py
+contextlens/stats.py
+contextlens/test_router.py
+contextlens/test_semantic.py
+contextlens/test_triage.py
+contextlens/triage.py
 contextlens/wrap.py
 contextlens.egg-info/PKG-INFO
 contextlens.egg-info/SOURCES.txt
