@@ -52,6 +52,15 @@ app = FastAPI(
 )
 
 # One engine per session (keyed by API key)
+
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 _engines: dict[str, ContextLens] = {}
 
 ANTHROPIC_BASE = "https://api.anthropic.com"
@@ -260,6 +269,30 @@ async def stats(request: Request):
 
     return {"message": "No stats yet — make some API calls first"}
 
+
+
+from datetime import datetime
+_captured_turns: list = []
+
+@app.post("/ingest")
+async def ingest_turn(request: Request):
+    body = await request.json()
+    turn = {
+        "id": len(_captured_turns) + 1,
+        "conv_id": body.get("convId", "unknown"),
+        "platform": body.get("platform", "unknown"),
+        "assistant_text": body.get("assistantText", ""),
+        "user_text": body.get("userText", ""),
+        "ts": body.get("ts", datetime.utcnow().isoformat()),
+        "received_at": datetime.utcnow().isoformat()
+    }
+    _captured_turns.append(turn)
+    print(f"[ContextLens] Ingested turn from {turn['platform']} | conv: {turn['conv_id'][:8]}")
+    return {"status": "ok", "id": turn["id"], "turns_stored": len(_captured_turns)}
+
+@app.get("/ingest")
+async def get_turns():
+    return {"turns": _captured_turns, "total": len(_captured_turns)}
 
 if __name__ == "__main__":
     import uvicorn
