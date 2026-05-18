@@ -1,0 +1,39 @@
+﻿{
+  "manifest_version": 3,
+  "name": "ContextLens",
+  "version": "0.2.0",
+  "description": "AI memory and context compression for claude.ai, ChatGPT, and Gemini. Save tokens, avoid limits.",
+  "permissions": [
+    "storage", "tabs",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://claude.ai/*",
+    "https://chatgpt.com/*",
+    "https://gemini.google.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://claude.ai/*",
+        "https://chatgpt.com/*",
+        "https://gemini.google.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "ContextLens",
+    "default_popup": "popup.html"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["injector.js"],
+      "matches": ["https://claude.ai/*"]
+    }
+  ]
+}

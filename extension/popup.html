@@ -1,0 +1,532 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ContextLens</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;800&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --bg2: #111118;
+    --bg3: #1a1a24;
+    --border: #2a2a3a;
+    --accent: #00ff88;
+    --accent2: #00cc6a;
+    --accent-dim: rgba(0,255,136,0.1);
+    --accent-dim2: rgba(0,255,136,0.05);
+    --text: #e8e8f0;
+    --text-dim: #6b6b80;
+    --text-mid: #9999b0;
+    --red: #ff4466;
+    --gold: #ffcc44;
+    --blue: #4488ff;
+    --width: 380px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    width: var(--width);
+    min-height: 520px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    overflow: hidden;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px 0;
+  }
+
+  .logo-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .logo-icon {
+    width: 26px;
+    height: 26px;
+    background: var(--accent);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+
+  .logo-text {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 15px;
+    color: var(--text);
+    letter-spacing: -0.3px;
+  }
+
+  .logo-text span {
+    color: var(--accent);
+  }
+
+  .platform-badge {
+    font-size: 9px;
+    padding: 3px 7px;
+    border-radius: 20px;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid rgba(0,255,136,0.2);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* ── TABS ── */
+  .tabs {
+    display: flex;
+    gap: 0;
+  }
+
+  .tab {
+    flex: 1;
+    padding: 8px 0;
+    text-align: center;
+    cursor: pointer;
+    font-size: 10px;
+    color: var(--text-dim);
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 500;
+  }
+
+  .tab:hover { color: var(--text-mid); }
+
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* ── PANELS ── */
+  .panel {
+    display: none;
+    padding: 14px 16px;
+    height: 430px;
+    overflow-y: auto;
+  }
+
+  .panel.active { display: block; }
+
+  .panel::-webkit-scrollbar { width: 4px; }
+  .panel::-webkit-scrollbar-track { background: transparent; }
+  .panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ── MEMORY PANEL ── */
+  .search-wrap {
+    position: relative;
+    margin-bottom: 12px;
+  }
+
+  .search-input {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px 8px 30px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--text-dim); }
+
+  .search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+
+  .memory-count {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+
+  .memory-count span { color: var(--accent); }
+
+  .turn-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .turn-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    transition: border-color 0.15s;
+    position: relative;
+  }
+
+  .turn-card:hover { border-color: rgba(0,255,136,0.3); }
+
+  .turn-card.pinned {
+    border-color: rgba(255,204,68,0.4);
+    background: rgba(255,204,68,0.03);
+  }
+
+  .turn-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
+  .turn-platform {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--accent);
+  }
+
+  .turn-ts {
+    font-size: 9px;
+    color: var(--text-dim);
+  }
+
+  .turn-text {
+    color: var(--text-mid);
+    font-size: 11px;
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .turn-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .btn-small {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .btn-small:hover { border-color: var(--accent); color: var(--accent); }
+
+  .btn-small.pin-btn.pinned {
+    border-color: rgba(255,204,68,0.5);
+    color: var(--gold);
+  }
+
+  .btn-small.del-btn:hover {
+    border-color: var(--red);
+    color: var(--red);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+  }
+
+  .empty-state .big { font-size: 32px; margin-bottom: 12px; }
+  .empty-state p { line-height: 1.6; font-size: 11px; }
+
+  /* ── STATS PANEL ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .stat-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+
+  .stat-label {
+    font-size: 9px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 6px;
+  }
+
+  .stat-value {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 22px;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .stat-unit {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 3px;
+  }
+
+  .stat-card.full {
+    grid-column: 1 / -1;
+  }
+
+  .platform-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .platform-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .platform-row:last-child { border-bottom: none; }
+
+  .platform-name {
+    font-size: 11px;
+    color: var(--text-mid);
+    text-transform: capitalize;
+  }
+
+  .platform-count {
+    font-size: 11px;
+    color: var(--accent);
+  }
+
+  .section-title {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    margin-top: 4px;
+  }
+
+  /* ── SETTINGS PANEL ── */
+  .settings-section {
+    margin-bottom: 20px;
+  }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+  }
+
+  .setting-label {
+    font-size: 11px;
+    color: var(--text);
+  }
+
+  .setting-sub {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  .btn-action {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 6px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-mid);
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+
+  .btn-action:hover { border-color: var(--accent); color: var(--accent); }
+
+  .btn-action.danger:hover { border-color: var(--red); color: var(--red); }
+
+  .btn-action.primary {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .version-line {
+    text-align: center;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── LOADING ── */
+  .loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+
+  .pulse {
+    animation: pulse 1.5s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo-row">
+    <div class="logo">
+      <div class="logo-icon">⬡</div>
+      <div class="logo-text">Context<span>Lens</span></div>
+    </div>
+    <div class="platform-badge" id="platformBadge">—</div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" data-tab="memory">Memory</div>
+    <div class="tab" data-tab="stats">Stats</div>
+    <div class="tab" data-tab="settings">Settings</div>
+  </div>
+</div>
+
+<!-- MEMORY PANEL -->
+<div class="panel active" id="panel-memory">
+  <div class="search-wrap">
+    <span class="search-icon">⌕</span>
+    <input class="search-input" id="searchInput" type="text" placeholder="Search memory...">
+  </div>
+  <div class="memory-count" id="memoryCount">Loading...</div>
+  <div class="turn-list" id="turnList">
+    <div class="loading"><span class="pulse">Loading memory...</span></div>
+  </div>
+</div>
+
+<!-- STATS PANEL -->
+<div class="panel" id="panel-stats">
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">This Chat</div>
+      <div class="stat-value" id="statChat">—</div>
+      <div class="stat-unit">tokens saved</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">This Session</div>
+      <div class="stat-value" id="statSession">—</div>
+      <div class="stat-unit">tokens saved</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Lifetime</div>
+      <div class="stat-value" id="statLifetime">—</div>
+      <div class="stat-unit">tokens saved</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Turns Stored</div>
+      <div class="stat-value" id="statTurns">—</div>
+      <div class="stat-unit">in memory</div>
+    </div>
+    <div class="stat-card full">
+      <div class="stat-label">Platforms</div>
+      <div class="platform-list" id="platformList">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS PANEL -->
+<div class="panel" id="panel-settings">
+  <div class="settings-section">
+    <div class="section-title">Data</div>
+
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Export Memory</div>
+        <div class="setting-sub">Download all turns as JSON</div>
+      </div>
+      <button class="btn-action primary" id="btnExport">Export</button>
+    </div>
+
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Clear All Memory</div>
+        <div class="setting-sub">Permanently delete all stored turns</div>
+      </div>
+      <button class="btn-action danger" id="btnClear">Clear</button>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="section-title">Sync</div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Proxy Server URL</div>
+        <div class="setting-sub">Your server endpoint (leave blank for local only)</div>
+      </div>
+    </div>
+    <div style="padding:0 0 10px 0">
+      <input id="proxyUrl" type="text" placeholder="https://your-server.com" style="width:100%;background:#111118;border:1px solid #2a2a3a;border-radius:6px;padding:7px 10px;color:#e8e8f0;font-family:monospace;font-size:11px;outline:none">
+      <button class="btn-action primary" id="btnSaveProxy" style="margin-top:6px;width:100%">Save</button>
+    </div>
+  </div>
+  <div class="settings-section">
+    <div class="section-title">About</div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">User ID</div>
+        <div class="setting-sub" id="userId">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="version-line">ContextLens v0.2.0 — local-first AI memory</div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
+
+
+
+
