@@ -215,6 +215,7 @@ document.getElementById('searchInput').addEventListener('input', (e) => {
 loadMemory();
 loadStats();
 loadSettings();
+loadBeforeAfter();
 
 
 
@@ -235,3 +236,26 @@ chrome.storage.local.get(['cl_proxy_url'], (data) => {
   const input = document.getElementById('proxyUrl');
   if (input && data.cl_proxy_url) input.value = data.cl_proxy_url;
 });
+
+
+
+// -- BEFORE/AFTER COMPARISON --
+function loadBeforeAfter() {
+  chrome.storage.local.get(['cl_tokens_saved', 'cl_calls'], (data) => {
+    const saved = data.cl_tokens_saved || 0;
+    const calls = data.cl_calls || 1;
+    if (saved > 0) {
+      const avgSaved = Math.round(saved / calls);
+      const withTokens = avgSaved * 3;
+      const withoutTokens = withTokens + avgSaved;
+      const pct = Math.round(avgSaved / withoutTokens * 100);
+      const w1 = document.getElementById('statWith');
+      const w2 = document.getElementById('statWithout');
+      const w3 = document.getElementById('statSavedPct');
+      if (w1) w1.textContent = withTokens.toLocaleString();
+      if (w2) w2.textContent = withoutTokens.toLocaleString();
+      if (w3) w3.textContent = pct + '%';
+    }
+  });
+}
+
