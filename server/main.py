@@ -294,6 +294,115 @@ async def ingest_turn(request: Request):
 async def get_turns():
     return {"turns": _captured_turns, "total": len(_captured_turns)}
 
+
+import asyncpg
+
+_db_pool = None
+
+async def get_db_pool():
+    global _db_pool
+    if _db_pool is None:
+        _db_pool = await asyncpg.create_pool(
+            dsn="postgresql://aria:aria123@localhost:5432/aria_db",
+            min_size=1,
+            max_size=5
+        )
+    return _db_pool
+
+@app.post("/ingest2")
+async def ingest_turn_db(request: Request):
+    body = await request.json()
+    try:
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO contextlens_turns (conv_id, platform, assistant_text, user_text, ts)
+                VALUES ($1, $2, $3, $4, $5)
+            """,
+                body.get("convId", "unknown"),
+                body.get("platform", "unknown"),
+                body.get("assistantText", ""),
+                body.get("userText", ""),
+                __import__("datetime").datetime.fromisoformat(body["ts"].replace("Z","+00:00")) if body.get("ts") else __import__("datetime").datetime.utcnow()
+            )
+        return {"status": "ok", "storage": "postgresql"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+@app.get("/ingest2")
+async def get_turns_db(limit: int = 50):
+    try:
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM contextlens_turns ORDER BY received_at DESC LIMIT $1", limit
+            )
+        return {"turns": [dict(r) for r in rows], "total": len(rows)}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
+from sentence_transformers import SentenceTransformer
+import numpy as np
+
+_embed_model = None
+
+def get_embed_model():
+    global _embed_model
+    if _embed_model is None:
+        _embed_model = SentenceTransformer('all-MiniLM-L6-v2')
+    return _embed_model
+
+def cosine_similarity(a, b):
+    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+@app.post("/compress")
+async def compress_messages(request: Request):
+    body = await request.json()
+    messages = body.get("messages", [])
+    threshold = body.get("threshold", 0.85)
+
+    if len(messages) < 3:
+        return {"compressed": messages, "removed": 0, "redundancy_pct": 0}
+
+    model = get_embed_model()
+    texts = [m.get("content", "") for m in messages]
+    embeddings = model.encode(texts)
+
+    kept = []
+    kept_embeddings = []
+    removed = 0
+
+    for i, (msg, emb) in enumerate(zip(messages, embeddings)):
+        is_last = i == len(messages) - 1
+        if is_last:
+            kept.append(msg)
+            continue
+
+        is_duplicate = False
+        for kept_emb in kept_embeddings:
+            if cosine_similarity(emb, kept_emb) > threshold:
+                is_duplicate = True
+                removed += 1
+                break
+
+        if not is_duplicate:
+            kept.append(msg)
+            kept_embeddings.append(emb)
+
+    original_chars = sum(len(m.get("content", "")) for m in messages)
+    compressed_chars = sum(len(m.get("content", "")) for m in kept)
+    redundancy_pct = round((original_chars - compressed_chars) / original_chars * 100) if original_chars > 0 else 0
+
+    return {
+        "compressed": kept,
+        "removed": removed,
+        "original_count": len(messages),
+        "compressed_count": len(kept),
+        "redundancy_pct": redundancy_pct,
+        "tokens_saved_estimate": round((original_chars - compressed_chars) / 4)
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8081)
