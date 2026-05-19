@@ -2,22 +2,27 @@
   "manifest_version": 3,
   "name": "ContextLens",
   "version": "0.2.0",
-  "description": "AI memory and context compression for claude.ai, ChatGPT, and Gemini. Save tokens, avoid limits.",
+  "description": "AI memory and context compression for Claude, ChatGPT, Gemini, DeepSeek, Perplexity and more. Save tokens, avoid limits.",
   "permissions": [
-    "storage", "tabs",
-    "activeTab"
+    "storage", "tabs", "identity", "activeTab"
   ],
   "host_permissions": [
     "https://claude.ai/*",
     "https://chatgpt.com/*",
-    "https://gemini.google.com/*"
+    "https://gemini.google.com/*",
+    "https://chat.deepseek.com/*",
+    "https://www.perplexity.ai/*",
+    "https://platform.openai.com/*"
   ],
   "content_scripts": [
     {
       "matches": [
         "https://claude.ai/*",
         "https://chatgpt.com/*",
-        "https://gemini.google.com/*"
+        "https://gemini.google.com/*",
+        "https://chat.deepseek.com/*",
+        "https://www.perplexity.ai/*",
+        "https://platform.openai.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_start"
@@ -33,7 +38,14 @@
   "web_accessible_resources": [
     {
       "resources": ["injector.js"],
-      "matches": ["https://claude.ai/*"]
+      "matches": [
+        "https://claude.ai/*",
+        "https://chatgpt.com/*",
+        "https://gemini.google.com/*",
+        "https://chat.deepseek.com/*",
+        "https://www.perplexity.ai/*",
+        "https://platform.openai.com/*"
+      ]
     }
   ]
 }
