@@ -37,7 +37,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["injector.js"],
+      "resources": ["injector.js", "lib/transformers.min.js", "lib/compressor.js"],
       "matches": [
         "https://claude.ai/*",
         "https://chatgpt.com/*",
@@ -49,3 +49,4 @@
     }
   ]
 }
+
