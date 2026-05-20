@@ -1,0 +1,74 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Welcome to ContextLens</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0f; color: #e8e8f0; font-family: 'Segoe UI', monospace; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+  .card { max-width: 520px; width: 100%; background: #111118; border: 1px solid #00ff88; border-radius: 16px; padding: 40px; }
+  .logo { font-size: 32px; color: #00ff88; margin-bottom: 8px; }
+  h1 { font-size: 24px; font-weight: 800; color: #00ff88; margin-bottom: 8px; }
+  .tagline { color: #6b6b80; font-size: 14px; margin-bottom: 32px; }
+  .step { display: flex; gap: 16px; margin-bottom: 24px; align-items: flex-start; }
+  .step-num { background: #00ff88; color: #0a0a0f; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; flex-shrink: 0; }
+  .step-text h3 { font-size: 14px; color: #e8e8f0; margin-bottom: 4px; }
+  .step-text p { font-size: 12px; color: #6b6b80; line-height: 1.6; }
+  .platforms { display: flex; gap: 8px; flex-wrap: wrap; margin: 24px 0; }
+  .platform { background: #1a1a2e; border: 1px solid #2a2a3a; border-radius: 6px; padding: 6px 12px; font-size: 12px; color: #9999b0; }
+  .btn { display: block; width: 100%; padding: 14px; background: #00ff88; color: #0a0a0f; border: none; border-radius: 8px; font-size: 15px; font-weight: 800; cursor: pointer; text-align: center; text-decoration: none; margin-top: 24px; }
+  .btn:hover { background: #00cc6a; }
+  .privacy { text-align: center; font-size: 11px; color: #6b6b80; margin-top: 16px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">⬡</div>
+  <h1>Welcome to ContextLens</h1>
+  <p class="tagline">AI memory and context compression — runs entirely in your browser</p>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-text">
+      <h3>Works automatically</h3>
+      <p>Just chat normally. ContextLens captures every conversation turn in the background — no setup needed.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-text">
+      <h3>Saves tokens with semantic compression</h3>
+      <p>Detects and removes redundant context from your conversations. Average 40-50% token reduction.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-text">
+      <h3>Green indicator = it's working</h3>
+      <p>After each response, a green ⚡ indicator shows tokens saved. Click it to view your memory.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-text">
+      <h3>Your data stays on your device</h3>
+      <p>All memory stored locally in your browser. Nothing leaves your machine unless you configure a sync server.</p>
+    </div>
+  </div>
+
+  <div class="platforms">
+    <span class="platform">✓ Claude.ai</span>
+    <span class="platform">✓ ChatGPT</span>
+    <span class="platform">✓ Perplexity</span>
+    <span class="platform">+ more coming</span>
+  </div>
+
+  <a href="https://claude.ai" class="btn">Start using ContextLens →</a>
+
+  <p class="privacy">🔒 Privacy first — ContextLens never sells your data or sends it to third parties.<br>All processing happens locally in your browser.</p>
+</div>
+</body>
+</html>

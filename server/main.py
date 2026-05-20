@@ -36,7 +36,12 @@ def check_rate_limit(api_key: str) -> bool:
     # Record request
     _request_counts[api_key].append(now)
     return True
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+limiter = Limiter(key_func=get_remote_address)
 from fastapi.responses import JSONResponse
 import httpx
 import json
@@ -310,6 +315,7 @@ async def get_db_pool():
     return _db_pool
 
 @app.post("/ingest2")
+@limiter.limit("60/minute")
 async def ingest_turn_db(request: Request):
     body = await request.json()
     try:
@@ -357,6 +363,7 @@ def cosine_similarity(a, b):
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
 @app.post("/compress")
+@limiter.limit("30/minute")
 async def compress_messages(request: Request):
     body = await request.json()
     messages = body.get("messages", [])
