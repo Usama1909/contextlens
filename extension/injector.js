@@ -122,7 +122,9 @@
         }
       }
     } catch(err) {
-      console.warn('[ContextLens injector] SSE read error:', err);
+      if (err.name !== 'AbortError' && err.name !== 'DOMException') {
+        console.warn('[ContextLens injector] SSE read error:', err);
+      }
     }
   }
 
@@ -150,4 +152,5 @@
 
   console.log('[ContextLens injector] MAIN world fetch interceptor active');
 })();
+
 
