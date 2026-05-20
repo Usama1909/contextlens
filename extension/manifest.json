@@ -1,7 +1,7 @@
 ﻿{
   "manifest_version": 3,
   "name": "ContextLens",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "AI memory and context compression for Claude, ChatGPT, Gemini, DeepSeek, Perplexity and more. Save tokens, avoid limits.",
   "permissions": [
     "storage", "tabs", "identity", "activeTab"
@@ -49,5 +49,6 @@
     }
   ]
 }
+
 
 
