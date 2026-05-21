@@ -1,0 +1,104 @@
+{
+  "coding_session": [
+    {
+      "method": "Baseline (no compression)",
+      "reduction_pct": 0.0,
+      "fidelity_pct": 100.0,
+      "latency_ms": 0.0,
+      "original_messages": 14,
+      "compressed_messages": 14
+    },
+    {
+      "method": "Simple truncation (last 8)",
+      "reduction_pct": 44.6,
+      "fidelity_pct": 81.5,
+      "latency_ms": 0.0,
+      "original_messages": 14,
+      "compressed_messages": 9
+    },
+    {
+      "method": "ctxlens balanced",
+      "reduction_pct": 82.0,
+      "fidelity_pct": 71.5,
+      "latency_ms": 3059.3,
+      "original_messages": 14,
+      "compressed_messages": 4
+    },
+    {
+      "method": "ctxlens economic",
+      "reduction_pct": 82.0,
+      "fidelity_pct": 71.5,
+      "latency_ms": 2974.6,
+      "original_messages": 14,
+      "compressed_messages": 4
+    }
+  ],
+  "agent_loop": [
+    {
+      "method": "Baseline (no compression)",
+      "reduction_pct": 0.0,
+      "fidelity_pct": 100.0,
+      "latency_ms": 0.0,
+      "original_messages": 13,
+      "compressed_messages": 13
+    },
+    {
+      "method": "Simple truncation (last 8)",
+      "reduction_pct": 29.4,
+      "fidelity_pct": 83.5,
+      "latency_ms": 0.0,
+      "original_messages": 13,
+      "compressed_messages": 9
+    },
+    {
+      "method": "ctxlens balanced",
+      "reduction_pct": 46.3,
+      "fidelity_pct": 62.4,
+      "latency_ms": 2970.3,
+      "original_messages": 13,
+      "compressed_messages": 7
+    },
+    {
+      "method": "ctxlens economic",
+      "reduction_pct": 46.3,
+      "fidelity_pct": 62.4,
+      "latency_ms": 3032.4,
+      "original_messages": 13,
+      "compressed_messages": 7
+    }
+  ],
+  "research_conversation": [
+    {
+      "method": "Baseline (no compression)",
+      "reduction_pct": 0.0,
+      "fidelity_pct": 100.0,
+      "latency_ms": 0.0,
+      "original_messages": 13,
+      "compressed_messages": 13
+    },
+    {
+      "method": "Simple truncation (last 8)",
+      "reduction_pct": 39.8,
+      "fidelity_pct": 79.3,
+      "latency_ms": 0.0,
+      "original_messages": 13,
+      "compressed_messages": 8
+    },
+    {
+      "method": "ctxlens balanced",
+      "reduction_pct": 73.7,
+      "fidelity_pct": 62.7,
+      "latency_ms": 3030.5,
+      "original_messages": 13,
+      "compressed_messages": 5
+    },
+    {
+      "method": "ctxlens economic",
+      "reduction_pct": 73.7,
+      "fidelity_pct": 62.7,
+      "latency_ms": 2981.7,
+      "original_messages": 13,
+      "compressed_messages": 5
+    }
+  ]
+}

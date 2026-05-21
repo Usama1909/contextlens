@@ -1,0 +1,128 @@
+{
+  "coding_session": [
+    {
+      "method": "Baseline",
+      "reduction_pct": 0.0,
+      "fidelity_pct": 42.7,
+      "fact_retention_pct": 71.4,
+      "semantic_score_pct": -0.3,
+      "latency_ms": 0.0,
+      "original_messages": 14,
+      "compressed_messages": 14
+    },
+    {
+      "method": "Truncation (last 8)",
+      "reduction_pct": 44.6,
+      "fidelity_pct": 57.5,
+      "fact_retention_pct": 71.4,
+      "semantic_score_pct": 36.6,
+      "latency_ms": 0.0,
+      "original_messages": 14,
+      "compressed_messages": 9
+    },
+    {
+      "method": "ctxlens balanced",
+      "reduction_pct": 82.0,
+      "fidelity_pct": 57.1,
+      "fact_retention_pct": 57.1,
+      "semantic_score_pct": 57.1,
+      "latency_ms": 0.1,
+      "original_messages": 14,
+      "compressed_messages": 4
+    },
+    {
+      "method": "ctxlens economic",
+      "reduction_pct": 82.0,
+      "fidelity_pct": 57.1,
+      "fact_retention_pct": 57.1,
+      "semantic_score_pct": 57.1,
+      "latency_ms": 0.1,
+      "original_messages": 14,
+      "compressed_messages": 4
+    }
+  ],
+  "agent_loop": [
+    {
+      "method": "Baseline",
+      "reduction_pct": 0.0,
+      "fidelity_pct": 75.3,
+      "fact_retention_pct": 100.0,
+      "semantic_score_pct": 38.2,
+      "latency_ms": 0.0,
+      "original_messages": 13,
+      "compressed_messages": 13
+    },
+    {
+      "method": "Truncation (last 8)",
+      "reduction_pct": 31.4,
+      "fidelity_pct": 75.6,
+      "fact_retention_pct": 100.0,
+      "semantic_score_pct": 38.9,
+      "latency_ms": 0.0,
+      "original_messages": 13,
+      "compressed_messages": 9
+    },
+    {
+      "method": "ctxlens balanced",
+      "reduction_pct": 45.2,
+      "fidelity_pct": 83.8,
+      "fact_retention_pct": 100.0,
+      "semantic_score_pct": 59.6,
+      "latency_ms": 0.2,
+      "original_messages": 13,
+      "compressed_messages": 7
+    },
+    {
+      "method": "ctxlens economic",
+      "reduction_pct": 45.2,
+      "fidelity_pct": 83.8,
+      "fact_retention_pct": 100.0,
+      "semantic_score_pct": 59.6,
+      "latency_ms": 0.2,
+      "original_messages": 13,
+      "compressed_messages": 7
+    }
+  ],
+  "research_conversation": [
+    {
+      "method": "Baseline",
+      "reduction_pct": 0.0,
+      "fidelity_pct": 74.2,
+      "fact_retention_pct": 100.0,
+      "semantic_score_pct": 35.5,
+      "latency_ms": 0.0,
+      "original_messages": 13,
+      "compressed_messages": 13
+    },
+    {
+      "method": "Truncation (last 8)",
+      "reduction_pct": 43.1,
+      "fidelity_pct": 84.2,
+      "fact_retention_pct": 100.0,
+      "semantic_score_pct": 60.4,
+      "latency_ms": 0.0,
+      "original_messages": 13,
+      "compressed_messages": 8
+    },
+    {
+      "method": "ctxlens balanced",
+      "reduction_pct": 73.3,
+      "fidelity_pct": 61.5,
+      "fact_retention_pct": 57.1,
+      "semantic_score_pct": 68.2,
+      "latency_ms": 0.2,
+      "original_messages": 13,
+      "compressed_messages": 5
+    },
+    {
+      "method": "ctxlens economic",
+      "reduction_pct": 73.3,
+      "fidelity_pct": 61.5,
+      "fact_retention_pct": 57.1,
+      "semantic_score_pct": 68.2,
+      "latency_ms": 0.1,
+      "original_messages": 13,
+      "compressed_messages": 5
+    }
+  ]
+}

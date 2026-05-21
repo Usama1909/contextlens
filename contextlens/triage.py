@@ -1,3 +1,59 @@
+
+
+class ExtractiveSummariser:
+    """
+    Compresses a message to its key sentences using TF-IDF scoring.
+    No LLM calls — fast, local, zero API cost.
+    """
+
+    def summarise(self, text: str, max_sentences: int = 2) -> str:
+        """Extract the most important sentences from text."""
+        import re
+
+        # Split into sentences
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        if len(sentences) <= max_sentences:
+            return text
+
+        # Score sentences by word frequency (TF-IDF approximation)
+        words = text.lower().split()
+        word_freq = {}
+        for word in words:
+            word = re.sub(r'[^a-z0-9]', '', word)
+            if len(word) > 3:
+                word_freq[word] = word_freq.get(word, 0) + 1
+
+        # Normalize
+        max_freq = max(word_freq.values()) if word_freq else 1
+        word_freq = {w: f/max_freq for w, f in word_freq.items()}
+
+        # Score each sentence
+        scored = []
+        for i, sentence in enumerate(sentences):
+            words_in_sent = sentence.lower().split()
+            score = sum(word_freq.get(re.sub(r'[^a-z0-9]', '', w), 0) for w in words_in_sent)
+            # Boost first and last sentences
+            if i == 0 or i == len(sentences) - 1:
+                score *= 1.5
+            scored.append((score, i, sentence))
+
+        # Keep top sentences in original order
+        top = sorted(scored, reverse=True)[:max_sentences]
+        top = sorted(top, key=lambda x: x[1])
+        summary = ' '.join(s[2] for s in top)
+
+        return f"[SUMMARY] {summary}"
+
+    def should_summarise(self, text: str) -> bool:
+        """Only summarise if text is long enough to benefit."""
+        return len(text) > 400 and len(text.split('.')) > 3
+
+    def max_sentences_for(self, text: str) -> int:
+        """Determine how many sentences to keep based on length."""
+        if len(text) > 1000:
+            return 2
+        return 1
+
 """
 Semantic Triage Engine
 
@@ -121,7 +177,16 @@ class SemanticTriage:
                     compressed += 1
 
             elif action == "drop":
-                dropped += 1
+                # Instead of dropping, summarise long messages, drop short ones
+                summariser = ExtractiveSummariser()
+                if summariser.should_summarise(content):
+                    n = summariser.max_sentences_for(content)
+                    summary = summariser.summarise(content, max_sentences=n)
+                    result.append({**msg, "content": summary})
+                    compressed += 1
+                else:
+                    # Short irrelevant message — drop it
+                    dropped += 1
 
         stats = {
             "method": "semantic",

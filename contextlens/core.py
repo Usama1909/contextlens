@@ -244,9 +244,9 @@ class ContextLens:
                 tool_calls_seen[tool_name] += 1
                 # Keep only most recent call per tool type
                 future_same = sum(
-                    1 for _, t in classified[i+1:]
-                    if t == "tool_call" and self._extract_tool_name(
-                        str(_[0].get("content", ""))
+                    1 for future_msg, future_t in classified[i+1:]
+                    if future_t == "tool_call" and self._extract_tool_name(
+                        str(future_msg.get("content", ""))
                     ) == tool_name
                 )
                 if future_same == 0:
