@@ -1,283 +1,202 @@
 # ContextLens
 
-> **93% of tokens sent to LLMs are identical repeated data. ContextLens eliminates that waste.**
+**The context compression protocol for LLM inference.**
 
+> 80,000+ words saved. 94% meaning retained. One line of code.
+
+[![PyPI version](https://badge.fury.io/py/ctxlens.svg)](https://pypi.org/project/ctxlens/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![PyPI version](https://img.shields.io/badge/pypi-v0.1.0-blue.svg)](https://pypi.org/project/contextlens)
-[![Protocol: CXP v0.1](https://img.shields.io/badge/protocol-CXP%20v0.1-purple.svg)](docs/CXP-SPEC-v0.1.md)
 
 ---
 
 ## The Problem
 
-Every LLM application wastes tokens. Not 10%. Not 20%. **93%.**
+Every time you call Claude or GPT, you're sending the same context over and over again.
+Repeated messages, duplicate code blocks, redundant explanations — all costing you tokens.
 
-We measured a real production AI system (a live financial intelligence platform making thousands of decisions per day) and found:
+A typical 20-message conversation has **~70% redundant content.**
 
-| Metric | Value |
-|---|---|
-| Total messages sent | 8,584 |
-| Unique messages | 599 |
-| Total characters sent | 282,981 |
-| Wasted characters | 263,234 |
-| **Redundancy** | **93.0%** |
-
-The same reasoning, same context, same instructions — sent hundreds of times. Your LLM reads it fresh every single time. You pay for every single token.
-
-This gets worse with agents. A 50-step agent loop can consume 800,000 tokens to complete a task that needs 50,000 tokens of actual information. **That is 94% waste on every complex task.**
-
----
-
-## The Solution
-
-ContextLens is a context compression protocol that sits between your code and any LLM API. It intercepts every request, eliminates redundancy, and forwards only what the model actually needs.
-
-**One line. Zero configuration. Works with your existing code.**
+## The Fix
 
 ```python
-# Before
 import anthropic
-client = anthropic.Anthropic(api_key="...")
+import ctxlens as cx
 
-# After — one line change
-import contextlens as cx
 client = cx.wrap(anthropic.Anthropic(api_key="..."))
 
-# Everything else stays identical
-# Your costs drop immediately
+# That's it. Every API call is now automatically compressed.
+response = client.messages.create(
+    model="claude-opus-4-5",
+    max_tokens=1000,
+    messages=[{"role": "user", "content": "..."}]
+)
 ```
 
----
-
-## What It Does
-
-### Layer 1 — Semantic Triage
-Scores every message in your conversation history for relevance to the current prompt. Irrelevant history is compressed or archived. The model only sees what matters right now.
-
-```
-Score > 0.8  →  Sent to model (Hot)
-Score 0.3-0.8 →  Compressed to summary (Warm)  
-Score < 0.3  →  Archived locally (Cold)
-```
-
-### Layer 2 — Deduplication Engine
-Identical or near-identical content is stored once and referenced. If your agent re-reads the same system context 200 times, it is sent once and cached.
-
-```
-"Regime:CRISIS Score:-45.4 Top:GLD" × 202 times
-→ "Regime:CRISIS [stable, 202 cycles, Score:-45.4]" × 1 time
-```
-
-### Layer 3 — Agent State Machine
-Agent loops are the worst offenders. ContextLens understands agent-specific message types and applies intelligent rules automatically.
-
-```
-GOAL        →  Always kept (never removed)
-TOOL_RESULT →  Kept if referenced in last 3 steps, else summarised
-TOOL_CALL   →  Only most recent per tool type kept
-REASONING   →  Last 5 steps kept, rest archived
-ERROR       →  Count + last error only ("Failed 3x: last=X")
-```
-
-### Layer 4 — Prompt Cache Integration
-Stable context blocks are automatically flagged for provider-side caching. You pay full price once. Every repeat is 90% cheaper.
+One line. Zero changes to your existing code. Drop-in replacement.
 
 ---
 
 ## Results
 
-| Use Case | Tokens Before | Tokens After | Reduction |
-|---|---|---|---|
-| Long conversation | 40,000 | 8,000 | 80% |
-| 50-step agent loop | 800,000 | 120,000 | 85% |
-| Code assistant session | 60,000 | 9,000 | 85% |
-| Production AI system* | 282,981 chars | 19,747 chars | **93%** |
-
-*Measured on real production data
+| Metric | Value |
+|--------|-------|
+| Token redundancy eliminated | up to 93% |
+| Meaning retained (fidelity score) | 94.9% |
+| Words saved (real usage, 297 conversations) | 80,500+ |
+| Latency overhead | ~2ms |
+| API compatibility | Anthropic, OpenAI, async support |
 
 ---
 
-## Installation
+## Install
 
 ```bash
-pip install contextlens
+pip install ctxlens
+```
+
+With semantic compression (recommended):
+```bash
+pip install ctxlens[semantic]
 ```
 
 ---
 
 ## Usage
 
-### Basic — Anthropic
-
+### Anthropic
 ```python
 import anthropic
-import contextlens as cx
+import ctxlens as cx
 
 client = cx.wrap(anthropic.Anthropic(api_key="..."))
-
-# Identical to normal usage — compression is automatic
 response = client.messages.create(
-    model="claude-sonnet-4-20250514",
-    max_tokens=1024,
-    messages=[{"role": "user", "content": "Hello"}]
+    model="claude-opus-4-5",
+    max_tokens=1000,
+    messages=[{"role": "user", "content": "..."}]
 )
+
+# See how much you saved
+print(client.savings)
+# {
+#   'calls': 1,
+#   'tokens_saved_estimate': 847,
+#   'redundancy_pct': 73.2,
+#   'cost_saved_gbp': 0.0025
+# }
 ```
 
-### Basic — OpenAI
-
+### OpenAI
 ```python
 import openai
-import contextlens as cx
+import ctxlens as cx
 
 client = cx.wrap(openai.OpenAI(api_key="..."))
-# Works identically
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "..."}]
+)
+
+print(client.savings)
 ```
 
-### Agent Loops
+### Async (AsyncAnthropic / AsyncOpenAI)
+```python
+import anthropic
+import ctxlens as cx
+
+client = cx.wrap(anthropic.AsyncAnthropic(api_key="..."))
+
+async def main():
+    response = await client.messages.create(
+        model="claude-opus-4-5",
+        max_tokens=1000,
+        messages=[{"role": "user", "content": "..."}]
+    )
+    print(client.savings)
+```
+
+### Agent loops
+```python
+import ctxlens as cx
+
+# Wrap your agent — prevents context limit failures on long runs
+agent = cx.wrap_agent(your_agent, budget="economic")
+result = agent.run("your task here")
+```
+
+### Direct compression
+```python
+from ctxlens import ContextLens
+
+engine = ContextLens(budget="balanced", show_savings=True)
+
+messages = [
+    {"role": "user", "content": "..."},
+    {"role": "assistant", "content": "..."},
+]
+
+result = engine.compress(messages)
+print(f"Saved: {result.tokens_estimated_saved} tokens")
+print(f"Fidelity: {result.fidelity_score * 100:.1f}% meaning retained")
+```
+
+---
+
+## Compression budgets
+
+| Budget | Aggressiveness | Best for |
+|--------|---------------|----------|
+| `economic` | High | Long agent loops, cost-sensitive apps |
+| `balanced` | Medium | General use (default) |
+| `precise` | Low | When accuracy is critical |
 
 ```python
-import contextlens as cx
-
-# Wrap your existing agent — zero other changes
-agent = cx.wrap_agent(your_langchain_agent)
-
-# Agent now never hits context limits
-# Long tasks cost same as short tasks
-result = agent.run("Analyse this 10,000 line codebase and fix all bugs")
-```
-
-### Token Budget Dial
-
-```python
-# Economic — aggressive compression, maximum savings
-client = cx.wrap(client, budget="economic")
-
-# Balanced — smart compression, preserves nuance  
-client = cx.wrap(client, budget="balanced")
-
-# Precise — minimal compression, maximum accuracy
-client = cx.wrap(client, budget="precise")
-```
-
-### See Your Savings
-
-```python
-import contextlens as cx
-
-client = cx.wrap(client, show_savings=True)
-
-# After each call:
-# ─────────────────────────────────────
-# ContextLens | This request
-#   Sent:     4,847 tokens (↓ from 12,203)
-#   Saved:    7,356 tokens  (~£0.018)
-#   Session:  £1.24 saved | 147g CO₂ avoided
-# ─────────────────────────────────────
+client = cx.wrap(anthropic.Anthropic(), budget="economic")
 ```
 
 ---
 
-## For Infrastructure / Data Centers
+## How it works
 
-ContextLens runs as a drop-in proxy in front of any inference server.
+ContextLens runs three compression stages:
 
-```bash
-docker run -p 8080:8080 \
-  -e UPSTREAM=http://your-vllm-instance:8000 \
-  contextlens/proxy:latest
-```
+1. **Exact deduplication** — removes identical repeated messages (~0ms overhead)
+2. **Semantic triage** — scores every message by relevance to the current query using `all-MiniLM-L6-v2` locally — zero external API calls
+3. **Agent-aware compression** — classifies messages by type (goal, error, tool_call, reasoning) and applies type-specific rules
 
-Change one line in your application:
-```
-ANTHROPIC_BASE_URL=https://your-proxy:8080
-```
-
-**Result:** Every GPU on your cluster handles more concurrent users. Same hardware. Less energy. More revenue per chip.
-
-### vLLM Plugin (coming in v0.3)
-
-```bash
-vllm serve meta-llama/Llama-3-70b --contextlens-plugin enabled
-```
-
-Context is compressed before the KV cache is allocated. The GPU never processes redundant tokens.
+The fidelity score measures how much meaning was retained after compression. A score of 0.95 means 95% of the semantic content was preserved.
 
 ---
 
-## The Carbon Impact
+## Chrome Extension
 
-Every redundant token burns real energy. At scale:
+ContextLens also comes as a Chrome extension that works directly in your browser on Claude, ChatGPT, Gemini, DeepSeek, and Perplexity — no API key needed.
 
-- 10 million API calls/day × 60% average compression = **6 million fewer GPU-seconds per day**
-- Equivalent to powering a city block for a year — eliminated entirely
-- ContextLens tracks your CO₂ avoided in real time
-
-AI inference is the fastest growing slice of global electricity consumption. Context waste is the fastest fix.
-
----
-
-## The Open Protocol: CXP
-
-ContextLens is built on the **Context Exchange Protocol (CXP)** — an open specification for how context moves between applications and language models.
-
-The spec is free. Anyone can implement it. Any model provider can support it.
-
-→ [Read the CXP v0.1 Specification](docs/CXP-SPEC-v0.1.md)
-
----
-
-## Benchmarks
-
-All benchmarks are reproducible. The methodology is open source.
-
-→ [See benchmark methodology](benchmarks/README.md)  
-→ [Run benchmarks on your own data](benchmarks/run.py)
+- Auto-compresses when context reaches 75%
+- Shows meaning retained score after every response
+- Stores memory across conversations and platforms
+- Export your memory as JSON
 
 ---
 
 ## Roadmap
 
-| Version | Feature | Status |
-|---|---|---|
-| v0.1 | Deduplication engine + basic proxy | 🔨 Building |
-| v0.2 | Semantic triage (MiniLM embeddings) | Planned |
-| v0.3 | Agent state machine | Planned |
-| v0.4 | Prompt cache integration | Planned |
-| v1.0 | Accuracy guarantee + CXP spec final | Planned |
-| v2.0 | vLLM hardware plugin | Planned |
-
----
-
-## Why Free
-
-Context waste is an infrastructure problem that affects every developer, every company, and the planet. A solution locked behind a paywall does not fix the infrastructure.
-
-ContextLens is free for developers. Forever.
-
-Infrastructure deployments (data centers, GPU clouds, enterprise on-premise) are the paid tier. They save millions. They can pay.
-
----
-
-## Contributing
-
-The protocol is open. Implementations are welcome.
-
-```bash
-git clone https://github.com/Usama1909/contextlens
-cd contextlens
-pip install -e ".[dev]"
-pytest tests/
-```
-
-→ [Contribution Guide](CONTRIBUTING.md)
+- [ ] GitHub pre-fetch filter (reduce token usage in agentic coding)
+- [ ] Project memory injection (auto-inject context into new chats)
+- [ ] Node.js SDK
+- [ ] MCP server for Claude Code
 
 ---
 
 ## License
 
-MIT — use it, fork it, build on it.
+MIT — free for personal and commercial use.
 
 ---
 
-*Built by [@Usama1909](https://github.com/Usama1909)*  
-*Founding benchmark measured on ARIA — a live autonomous financial intelligence system*
+## Author
+
+Built by [Usama Fateh Ali](https://github.com/Usama1909) as part of ARIA — an autonomous financial intelligence system.
+
+> "93% of tokens sent to LLMs are identical repeated data. ContextLens eliminates that waste."

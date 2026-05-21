@@ -16,5 +16,5 @@ from contextlens.core import ContextLens
 from contextlens.wrap import wrap, wrap_agent
 from contextlens.stats import SessionStats
 
-__version__ = "0.1.0"
+__version__ = "1.0.1"
 __all__ = ["wrap", "wrap_agent", "ContextLens", "SessionStats"]

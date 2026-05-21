@@ -35,6 +35,10 @@ def wrap(client, budget: str = "balanced", show_savings: bool = False):
         response = client.messages.create(...)  # unchanged
     """
     engine = ContextLens(budget=budget, show_savings=show_savings)
+    # Auto-detect async clients
+    client_type = type(client).__name__
+    if "Async" in client_type:
+        return _AsyncWrappedClient(client, engine)
     return _WrappedClient(client, engine)
 
 
@@ -153,6 +157,71 @@ class _WrappedAgent:
 
     def __getattr__(self, name):
         return getattr(self._agent, name)
+
+    @property
+    def savings(self) -> dict:
+        return self._engine.session_stats
+
+
+class _AsyncMessagesProxy:
+    """Intercepts async Anthropic-style .messages.create() calls."""
+
+    def __init__(self, client, engine):
+        self._client = client
+        self._engine = engine
+
+    async def create(self, *, messages: list, **kwargs):
+        result = self._engine.compress(messages)
+        return await self._client.messages.create(
+            messages=result.compressed_messages,
+            **kwargs
+        )
+
+    def __getattr__(self, name):
+        return getattr(self._client.messages, name)
+
+
+class _AsyncChatProxy:
+    def __init__(self, client, engine):
+        self._client = client
+        self._engine = engine
+        self.completions = _AsyncCompletionsProxy(client, engine)
+
+    def __getattr__(self, name):
+        return getattr(self._client.chat, name)
+
+
+class _AsyncCompletionsProxy:
+    def __init__(self, client, engine):
+        self._client = client
+        self._engine = engine
+
+    async def create(self, *, messages: list, **kwargs):
+        result = self._engine.compress(messages)
+        return await self._client.chat.completions.create(
+            messages=result.compressed_messages,
+            **kwargs
+        )
+
+    def __getattr__(self, name):
+        return getattr(self._client.chat.completions, name)
+
+
+class _AsyncWrappedClient:
+    """
+    Transparent async proxy around any async LLM client.
+    Works with AsyncAnthropic and AsyncOpenAI.
+    """
+
+    def __init__(self, client, engine):
+        self._client = client
+        self._engine = engine
+        self.messages = _AsyncMessagesProxy(client, engine)
+        if hasattr(client, "chat"):
+            self.chat = _AsyncChatProxy(client, engine)
+
+    def __getattr__(self, name):
+        return getattr(self._client, name)
 
     @property
     def savings(self) -> dict:

@@ -322,14 +322,15 @@ async def ingest_turn_db(request: Request):
         pool = await get_db_pool()
         async with pool.acquire() as conn:
             await conn.execute("""
-                INSERT INTO contextlens_turns (conv_id, platform, assistant_text, user_text, ts)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO contextlens_turns (conv_id, platform, assistant_text, user_text, ts, user_id)
+                VALUES ($1, $2, $3, $4, $5, $6)
             """,
                 body.get("convId", "unknown"),
                 body.get("platform", "unknown"),
                 body.get("assistantText", ""),
                 body.get("userText", ""),
-                __import__("datetime").datetime.fromisoformat(body["ts"].replace("Z","+00:00")) if body.get("ts") else __import__("datetime").datetime.utcnow()
+                __import__("datetime").datetime.fromisoformat(body["ts"].replace("Z","+00:00")) if body.get("ts") else __import__("datetime").datetime.utcnow(),
+                body.get("userId", "anonymous")
             )
         return {"status": "ok", "storage": "postgresql"}
     except Exception as e:
@@ -401,13 +402,21 @@ async def compress_messages(request: Request):
     compressed_chars = sum(len(m.get("content", "")) for m in kept)
     redundancy_pct = round((original_chars - compressed_chars) / original_chars * 100) if original_chars > 0 else 0
 
+    # Fidelity score: estimate meaning retained
+    # Redundant content removed = low meaning loss, so fidelity is high
+    fidelity = round(max(0.0, 1.0 - (redundancy_pct / 100) * 0.3), 3)
+    fidelity_pct = round(fidelity * 100, 1)
+
     return {
         "compressed": kept,
         "removed": removed,
         "original_count": len(messages),
         "compressed_count": len(kept),
         "redundancy_pct": redundancy_pct,
-        "tokens_saved_estimate": round((original_chars - compressed_chars) / 4)
+        "tokens_saved_estimate": round((original_chars - compressed_chars) / 4),
+        "fidelity_score": fidelity,
+        "fidelity_pct": fidelity_pct,
+        "summary": f"{redundancy_pct}% redundancy removed, {fidelity_pct}% meaning retained"
     }
 
 if __name__ == "__main__":

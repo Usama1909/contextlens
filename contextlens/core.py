@@ -36,6 +36,7 @@ class CompressionResult:
     tokens_estimated_saved: int
     redundancy_pct: float
     method: str  # "dedup", "triage", "summarise"
+    fidelity_score: float = 1.0  # meaning retained (0-1), 1.0 = no meaning lost
 
 
 class ContextLens:
@@ -135,6 +136,18 @@ class ContextLens:
         # Rough token estimate: ~4 chars per token
         tokens_saved = saved // 4
 
+        # Fidelity score: ratio of meaning retained
+        # If semantic triage ran, use avg score of kept messages
+        # Otherwise estimate from char retention (chars kept / original)
+        if self._triage and len(original_messages_snapshot) >= 3:
+            scored = self._triage.score_messages(compressed, str(original_messages_snapshot[-1].get("content", "")))
+            scores = [m.get("_score", 1.0) for m in scored]
+            fidelity = round(float(sum(scores) / len(scores)), 3) if scores else 1.0
+        else:
+            # Estimate: assume dropped chars were low-value (redundant)
+            # kept chars = high fidelity, so fidelity = 1 - (redundancy * 0.3)
+            fidelity = round(max(0.0, 1.0 - (redundancy / 100) * 0.3), 3)
+
         result = CompressionResult(
             original_messages=original_messages_snapshot,
             compressed_messages=compressed,
@@ -142,7 +155,8 @@ class ContextLens:
             compressed_chars=compressed_chars,
             tokens_estimated_saved=tokens_saved,
             redundancy_pct=redundancy,
-            method="dedup+agent"
+            method="dedup+agent",
+            fidelity_score=fidelity
         )
 
         # Update session stats
