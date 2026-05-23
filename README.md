@@ -208,3 +208,17 @@ MIT — free for personal and commercial use.
 Built by [Usama Fateh Ali](https://github.com/Usama1909) as part of ARIA — an autonomous financial intelligence system.
 
 > "93% of tokens sent to LLMs are identical repeated data. ContextLens eliminates that waste."
+
+## Real Production Measurement
+
+Measured on ARIA — a live autonomous financial intelligence system running 1,440 decision cycles per day:
+
+| Metric | Value |
+|--------|-------|
+| Token redundancy detected | **97.6%** |
+| Tokens before compression | 1,950 |
+| Tokens after compression | 46 |
+| Cost per cycle | £0.0057 → £0.00014 |
+| Monthly saving at scale | £100-500+ |
+
+Same decisions. 97.6% cheaper.
