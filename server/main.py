@@ -1,306 +1,89 @@
-
 """
-ContextLens Proxy Server
-
-Drop-in replacement for the Anthropic API.
-Change one line in your app:
-
-Before: ANTHROPIC_BASE_URL=https://api.anthropic.com
-After:  ANTHROPIC_BASE_URL=https://your-server:8080
-
-That's it. All API calls are now automatically compressed.
+ContextLens Proxy Server v2 — Clean rebuild with memory injection
 """
 from collections import defaultdict
-import time
+import time, re, hashlib, json
+from collections import Counter
+from pathlib import Path
+from datetime import datetime
 
-# Rate limiting — per API key
+# Rate limiting
 _request_counts: dict = defaultdict(list)
-RATE_LIMIT = 60  # requests per minute
-
+RATE_LIMIT = 60
 
 def check_rate_limit(api_key: str) -> bool:
-    """Returns True if request is allowed, False if rate limited."""
     now = time.time()
-    window = 60  # 1 minute window
-    
-    # Clean old requests
-    _request_counts[api_key] = [
-        t for t in _request_counts[api_key] 
-        if now - t < window
-    ]
-    
-    # Check limit
+    window = 60
+    _request_counts[api_key] = [t for t in _request_counts[api_key] if now - t < window]
     if len(_request_counts[api_key]) >= RATE_LIMIT:
         return False
-    
-    # Record request
     _request_counts[api_key].append(now)
     return True
-from fastapi import FastAPI, Request
+
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+import httpx
+import asyncpg
 
 limiter = Limiter(key_func=get_remote_address)
-from fastapi.responses import JSONResponse
-import httpx
-import json
-import os
-from pathlib import Path
-from contextlens.core import ContextLens
-from contextlens.router import SmartRouter
 
-app = FastAPI(
-    title="ContextLens Proxy",
-    description="Drop-in Anthropic API proxy with automatic context compression",
-    version="0.1.0"
-)
-
-# One engine per session (keyed by API key)
-
-from fastapi.middleware.cors import CORSMiddleware
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-_engines: dict[str, ContextLens] = {}
+app = FastAPI(title="ContextLens Proxy", version="2.0.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 ANTHROPIC_BASE = "https://api.anthropic.com"
 OPENAI_BASE = "https://api.openai.com"
-
-def detect_provider(model: str, headers: dict) -> str:
-    """Auto-detect provider from model name or headers."""
-    model = model.lower()
-    if any(x in model for x in ["gpt", "o1", "o3", "o4"]):
-        return "openai"
-    elif any(x in model for x in ["claude"]):
-        return "anthropic"
-    elif any(x in model for x in ["gemini"]):
-        return "google"
-    elif any(x in model for x in ["llama", "deepseek", "grok"]):
-        return "other"
-    # Check authorization header as fallback
-    auth = headers.get("authorization", "")
-    if auth.startswith("Bearer sk-"):
-        return "openai"
-    return "anthropic"  # default
 STATS_DIR = Path("stats")
 STATS_DIR.mkdir(exist_ok=True)
+
+import sys
+sys.path.insert(0, '/root/contextlens')
+from contextlens.core import ContextLens
+from contextlens.state_compiler import ConversationStateEngine
+from contextlens.router import SmartRouter
+_engines: dict = {}
 _router = SmartRouter()
 
+def detect_provider(model: str, headers: dict) -> str:
+    model = model.lower()
+    if any(x in model for x in ["gpt", "o1", "o3", "o4"]): return "openai"
+    elif any(x in model for x in ["claude"]): return "anthropic"
+    auth = headers.get("authorization", "")
+    if auth.startswith("Bearer sk-"): return "openai"
+    return "anthropic"
+
 def get_engine(api_key: str) -> ContextLens:
-    """Get or create a compression engine for this API key."""
     if api_key not in _engines:
-        _engines[api_key] = ContextLens(
-            budget="balanced",
-            enable_semantic=True
-        )
+        _engines[api_key] = ContextLens(budget="balanced", enable_semantic=True)
     return _engines[api_key]
 
-
 def save_stats(api_key: str, stats: dict):
-    """Persist stats to disk so they survive restarts."""
-    # Use hash of key for filename — never store raw API keys
-    import hashlib
     key_hash = hashlib.md5(api_key.encode()).hexdigest()[:12]
     stats_file = STATS_DIR / f"{key_hash}.json"
-
     existing = {}
     if stats_file.exists():
-        try:
-            existing = json.loads(stats_file.read_text())
-        except Exception:
-            existing = {}
-
-    # Accumulate totals
-    existing["calls"] = stats.get("calls", 0)
-    existing["chars_saved"] = stats.get("chars_saved", 0)
-    existing["tokens_saved_estimate"] = stats.get("tokens_saved_estimate", 0)
-    existing["redundancy_pct"] = stats.get("redundancy_pct", 0)
-
+        try: existing = json.loads(stats_file.read_text())
+        except: existing = {}
+    existing.update({
+        "calls": stats.get("calls", 0),
+        "chars_saved": stats.get("chars_saved", 0),
+        "tokens_saved_estimate": stats.get("tokens_saved_estimate", 0),
+        "redundancy_pct": stats.get("redundancy_pct", 0),
+    })
     stats_file.write_text(json.dumps(existing, indent=2))
 
-
 def load_stats(api_key: str) -> dict:
-    """Load persisted stats for this API key."""
-    import hashlib
     key_hash = hashlib.md5(api_key.encode()).hexdigest()[:12]
     stats_file = STATS_DIR / f"{key_hash}.json"
-
     if stats_file.exists():
-        try:
-            return json.loads(stats_file.read_text())
-        except Exception:
-            pass
+        try: return json.loads(stats_file.read_text())
+        except: pass
     return {}
-
-
-@app.get("/")
-async def root():
-    return {
-        "service": "ContextLens Proxy",
-        "version": "0.1.0",
-        "status": "running",
-        "docs": "/docs"
-    }
-
-
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-
-
-@app.post("/v1/messages")
-async def proxy_messages(request: Request):
-    """
-    Intercept Anthropic messages, compress, forward.
-    """
-    api_key = request.headers.get("x-api-key", "")
-    if not api_key:
-        raise HTTPException(status_code=401, detail="Missing x-api-key header")
-	# Rate limiting
-    if not check_rate_limit(api_key):
-        raise HTTPException(
-            status_code=429,
-            detail="Rate limit exceeded. Max 60 requests per minute."
-        )
-    body = await request.json()
-    # Smart routing — find minimum viable model
-    requested_model = body.get("model", "")
-    if requested_model:
-        routed_model = await _router.route(
-            body.get("messages", []),
-            requested_model,
-            {"anthropic": api_key},
-            force_route=True
-        )
-        body["model"] = routed_model
-    engine = get_engine(api_key)
-
-    # Compress the messages
-    messages = body.get("messages", [])
-    if messages:
-        result = engine.compress(messages)
-        body["messages"] = result.compressed_messages
-
-        if result.tokens_estimated_saved > 0:
-            print(
-                f"[ContextLens] "
-                f"{result.original_chars} → {result.compressed_chars} chars | "
-                f"~{result.tokens_estimated_saved} tokens saved | "
-                f"{result.redundancy_pct}% redundancy"
-            )
-
-        # Persist stats
-        save_stats(api_key, engine.session_stats)
-
-    # Forward to Anthropic with error handling
-    provider = detect_provider(body.get("model", ""), dict(request.headers))
-    
-    if provider == "openai":
-        forward_url = f"{OPENAI_BASE}/v1/chat/completions"
-        forward_headers = {
-            "Authorization": request.headers.get("authorization", f"Bearer {api_key}"),
-            "content-type": "application/json",
-        }
-    else:
-        forward_url = f"{ANTHROPIC_BASE}/v1/messages"
-        forward_headers = {
-            "x-api-key": api_key,
-            "anthropic-version": request.headers.get("anthropic-version", "2023-06-01"),
-            "content-type": "application/json",
-        }
-
-    try:
-        async with httpx.AsyncClient(timeout=120) as client:
-            response = await client.post(
-                forward_url,
-                headers=forward_headers,
-                json=body,
-            )
-        
-        # Add savings header so user can see compression worked
-        tokens_saved = result.tokens_estimated_saved if messages else 0
-        redundancy = result.redundancy_pct if messages else 0
-        
-        response_data = response.json()
-        headers_out = {
-            "X-ContextLens-Tokens-Saved": str(tokens_saved),
-            "X-ContextLens-Redundancy": f"{redundancy}%",
-            "X-ContextLens-Version": "0.1.0",
-        }
-        
-        return JSONResponse(
-            content=response_data,
-            status_code=response.status_code,
-            headers=headers_out
-        )
-    except httpx.TimeoutException:
-        raise HTTPException(
-            status_code=504,
-            detail="Upstream API timeout. Please try again."
-        )
-    except httpx.ConnectError:
-        raise HTTPException(
-            status_code=502,
-            detail="Cannot reach upstream API. Please try again."
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Proxy error: {str(e)}"
-        )
-
-@app.get("/v1/stats")
-async def stats(request: Request):
-    """Return compression stats for this API key."""
-    api_key = request.headers.get("x-api-key", "")
-    if not api_key:
-        raise HTTPException(status_code=401, detail="Missing x-api-key header")
-
-    # Live stats from memory
-    if api_key in _engines:
-        live = _engines[api_key].session_stats
-        save_stats(api_key, live)
-        return live
-
-    # Persisted stats from disk
-    persisted = load_stats(api_key)
-    if persisted:
-        return persisted
-
-    return {"message": "No stats yet — make some API calls first"}
-
-
-
-from datetime import datetime
-_captured_turns: list = []
-
-@app.post("/ingest")
-async def ingest_turn(request: Request):
-    body = await request.json()
-    turn = {
-        "id": len(_captured_turns) + 1,
-        "conv_id": body.get("convId", "unknown"),
-        "platform": body.get("platform", "unknown"),
-        "assistant_text": body.get("assistantText", ""),
-        "user_text": body.get("userText", ""),
-        "ts": body.get("ts", datetime.utcnow().isoformat()),
-        "received_at": datetime.utcnow().isoformat()
-    }
-    _captured_turns.append(turn)
-    print(f"[ContextLens] Ingested turn from {turn['platform']} | conv: {turn['conv_id'][:8]}")
-    return {"status": "ok", "id": turn["id"], "turns_stored": len(_captured_turns)}
-
-@app.get("/ingest")
-async def get_turns():
-    return {"turns": _captured_turns, "total": len(_captured_turns)}
-
-
-import asyncpg
 
 _db_pool = None
 
@@ -309,10 +92,75 @@ async def get_db_pool():
     if _db_pool is None:
         _db_pool = await asyncpg.create_pool(
             dsn="postgresql://aria:aria123@localhost:5432/aria_db",
-            min_size=1,
-            max_size=5
+            min_size=1, max_size=5
         )
     return _db_pool
+
+@app.get("/")
+async def root():
+    return {"service": "ContextLens Proxy", "version": "2.0.0", "status": "running"}
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+@app.get("/v1/stats")
+async def stats(request: Request):
+    api_key = request.headers.get("x-api-key", "")
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Missing x-api-key header")
+    if api_key in _engines:
+        live = _engines[api_key].session_stats
+        save_stats(api_key, live)
+        return live
+    persisted = load_stats(api_key)
+    if persisted:
+        return persisted
+    return {"message": "No stats yet"}
+
+@app.post("/v1/messages")
+async def proxy_messages(request: Request):
+    api_key = request.headers.get("x-api-key", "")
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Missing x-api-key header")
+    if not check_rate_limit(api_key):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Max 60 requests per minute.")
+    body = await request.json()
+    requested_model = body.get("model", "")
+    if requested_model:
+        routed_model = await _router.route(body.get("messages", []), requested_model, {"anthropic": api_key}, force_route=True)
+        body["model"] = routed_model
+    engine = get_engine(api_key)
+    messages = body.get("messages", [])
+    if messages:
+        result = engine.compress(messages)
+        body["messages"] = result.compressed_messages
+        if result.tokens_estimated_saved > 0:
+            print(f"[ContextLens] {result.original_chars} → {result.compressed_chars} chars | ~{result.tokens_estimated_saved} tokens saved")
+        save_stats(api_key, engine.session_stats)
+    provider = detect_provider(body.get("model", ""), dict(request.headers))
+    if provider == "openai":
+        forward_url = f"{OPENAI_BASE}/v1/chat/completions"
+        forward_headers = {"Authorization": request.headers.get("authorization", f"Bearer {api_key}"), "content-type": "application/json"}
+    else:
+        forward_url = f"{ANTHROPIC_BASE}/v1/messages"
+        forward_headers = {"x-api-key": api_key, "anthropic-version": request.headers.get("anthropic-version", "2023-06-01"), "content-type": "application/json"}
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(forward_url, headers=forward_headers, json=body)
+        tokens_saved = result.tokens_estimated_saved if messages else 0
+        redundancy = result.redundancy_pct if messages else 0
+        return JSONResponse(content=response.json(), status_code=response.status_code, headers={
+            "X-ContextLens-Tokens-Saved": str(tokens_saved),
+            "X-ContextLens-Redundancy": f"{redundancy}%",
+            "X-ContextLens-Version": "2.0.0",
+        })
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Upstream API timeout.")
+    except httpx.ConnectError:
+        raise HTTPException(status_code=502, detail="Cannot reach upstream API.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
 
 @app.post("/ingest2")
 @limiter.limit("60/minute")
@@ -329,7 +177,7 @@ async def ingest_turn_db(request: Request):
                 body.get("platform", "unknown"),
                 body.get("assistantText", ""),
                 body.get("userText", ""),
-                __import__("datetime").datetime.fromisoformat(body["ts"].replace("Z","+00:00")) if body.get("ts") else __import__("datetime").datetime.utcnow(),
+                datetime.fromisoformat(body["ts"].replace("Z","+00:00")) if body.get("ts") else datetime.utcnow(),
                 body.get("userId", "anonymous")
             )
         return {"status": "ok", "storage": "postgresql"}
@@ -341,72 +189,45 @@ async def get_turns_db(limit: int = 50):
     try:
         pool = await get_db_pool()
         async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT * FROM contextlens_turns ORDER BY received_at DESC LIMIT $1", limit
-            )
+            rows = await conn.fetch("SELECT * FROM contextlens_turns ORDER BY received_at DESC LIMIT $1", limit)
         return {"turns": [dict(r) for r in rows], "total": len(rows)}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 
-
-from sentence_transformers import SentenceTransformer
-import numpy as np
-
-_embed_model = None
-
-def get_embed_model():
-    global _embed_model
-    if _embed_model is None:
-        _embed_model = SentenceTransformer('all-MiniLM-L6-v2')
-    return _embed_model
-
-def cosine_similarity(a, b):
-    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
-
 @app.post("/compress")
 @limiter.limit("30/minute")
 async def compress_messages(request: Request):
+    from sentence_transformers import SentenceTransformer
+    import numpy as np
     body = await request.json()
     messages = body.get("messages", [])
     threshold = body.get("threshold", 0.85)
-
     if len(messages) < 3:
         return {"compressed": messages, "removed": 0, "redundancy_pct": 0}
-
-    model = get_embed_model()
+    model = SentenceTransformer('all-MiniLM-L6-v2')
     texts = [m.get("content", "") for m in messages]
     embeddings = model.encode(texts)
-
     kept = []
     kept_embeddings = []
     removed = 0
-
     for i, (msg, emb) in enumerate(zip(messages, embeddings)):
-        is_last = i == len(messages) - 1
-        if is_last:
+        if i == len(messages) - 1:
             kept.append(msg)
             continue
-
         is_duplicate = False
         for kept_emb in kept_embeddings:
-            if cosine_similarity(emb, kept_emb) > threshold:
+            sim = float(np.dot(emb, kept_emb) / (np.linalg.norm(emb) * np.linalg.norm(kept_emb)))
+            if sim > threshold:
                 is_duplicate = True
                 removed += 1
                 break
-
         if not is_duplicate:
             kept.append(msg)
             kept_embeddings.append(emb)
-
     original_chars = sum(len(m.get("content", "")) for m in messages)
     compressed_chars = sum(len(m.get("content", "")) for m in kept)
     redundancy_pct = round((original_chars - compressed_chars) / original_chars * 100) if original_chars > 0 else 0
-
-    # Fidelity score: estimate meaning retained
-    # Redundant content removed = low meaning loss, so fidelity is high
     fidelity = round(max(0.0, 1.0 - (redundancy_pct / 100) * 0.3), 3)
-    fidelity_pct = round(fidelity * 100, 1)
-
     return {
         "compressed": kept,
         "removed": removed,
@@ -415,9 +236,123 @@ async def compress_messages(request: Request):
         "redundancy_pct": redundancy_pct,
         "tokens_saved_estimate": round((original_chars - compressed_chars) / 4),
         "fidelity_score": fidelity,
-        "fidelity_pct": fidelity_pct,
-        "summary": f"{redundancy_pct}% redundancy removed, {fidelity_pct}% meaning retained"
+        "fidelity_pct": round(fidelity * 100, 1),
+        "summary": f"{redundancy_pct}% redundancy removed, {round(fidelity * 100, 1)}% meaning retained"
     }
+
+def extract_facts_from_turns(turns: list) -> dict:
+    all_text = " ".join([
+        (t.get("user_text", "") or "") + " " + (t.get("assistant_text", "") or "")
+        for t in turns
+    ])
+    tech_patterns = [
+        "python", "fastapi", "postgresql", "redis", "docker", "nginx",
+        "hetzner", "railway", "anthropic", "openai", "claude", "react",
+        "javascript", "typescript", "nodejs", "xgboost", "sklearn"
+    ]
+    detected_tech = [t for t in tech_patterns if t.lower() in all_text.lower()]
+    words = re.findall(r'\b[A-Z][A-Za-z0-9_-]{2,}\b', all_text)
+    word_freq = Counter(words)
+    projects = [w for w, count in word_freq.most_common(10) if count >= 2 and len(w) > 3]
+    recent_turns = turns[:10]
+    recent_text = " ".join([t.get("user_text", "") or "" for t in recent_turns if t.get("user_text")])
+    sentences = re.split(r'[.!?]+', recent_text)
+    sentences = [s.strip() for s in sentences if len(s.strip()) > 20][:3]
+    platforms = Counter([t.get("platform", "unknown") for t in turns])
+    return {
+        "tech_stack": detected_tech[:8],
+        "projects": projects[:6],
+        "recent_focus": sentences,
+        "platforms": dict(platforms),
+        "total_turns": len(turns),
+    }
+
+def build_context_summary(facts: dict) -> str:
+    lines = []
+    if facts["tech_stack"]:
+        lines.append(f"Tech stack: {', '.join(facts['tech_stack'])}")
+    if facts["projects"]:
+        lines.append(f"Active projects: {', '.join(facts['projects'])}")
+    if facts["recent_focus"]:
+        focus = facts["recent_focus"][0] if facts["recent_focus"] else ""
+        if focus:
+            lines.append(f"Recent focus: {focus[:100]}")
+    lines.append(f"Context: {facts['total_turns']} conversations across {', '.join(facts['platforms'].keys())}")
+    return "\n".join(lines)
+
+@app.get("/memory/extract")
+async def extract_memory(user_id: str, limit: int = 100):
+    try:
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT conv_id, platform, assistant_text, user_text, ts
+                FROM contextlens_turns
+                WHERE user_id = $1
+                ORDER BY received_at DESC
+                LIMIT $2
+            """, user_id, limit)
+        if not rows:
+            return {"status": "no_data", "summary": "", "facts": {}}
+        turns = [dict(r) for r in rows]
+        facts = extract_facts_from_turns(turns)
+        summary = build_context_summary(facts)
+        return {"status": "ok", "summary": summary, "facts": facts, "turns_analysed": len(turns)}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+@app.post("/memory/inject")
+async def get_inject_text(request: Request):
+    body = await request.json()
+    user_id = body.get("userId", "")
+    if not user_id:
+        return {"status": "error", "detail": "userId required"}
+    try:
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT conv_id, platform, assistant_text, user_text, ts
+                FROM contextlens_turns
+                WHERE user_id = $1
+                ORDER BY received_at DESC
+                LIMIT 100
+            """, user_id)
+        if not rows:
+            return {"status": "no_data", "inject_text": ""}
+        turns = [dict(r) for r in rows]
+        facts = extract_facts_from_turns(turns)
+        summary = build_context_summary(facts)
+        inject_text = f"[ContextLens Memory]\n{summary}\n[End Memory]"
+        return {"status": "ok", "inject_text": inject_text, "facts": facts}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
+
+@app.post("/compile")
+async def compile_conversation(request: Request):
+    body = await request.json()
+    messages = body.get("messages", [])
+    if not messages:
+        return {"status": "error", "detail": "messages required"}
+    try:
+        from contextlens.state_compiler import ConversationStateEngine
+        engine = ConversationStateEngine()
+        for msg in messages:
+            content = msg.get("content", "")
+            if content and len(content) > 10:
+                engine.process_turn(content)
+        compiled = engine.get_compiled_context()
+        return {
+            "status": "ok",
+            "compiled_context": compiled,
+            "original_tokens": engine.total_original_tokens,
+            "compiled_tokens": engine.total_compiled_tokens,
+            "compression_ratio": engine.compression_ratio,
+            "tokens_saved": engine.tokens_saved
+        }
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

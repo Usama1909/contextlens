@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ctxlens"
-version = "1.0.1"
+version = "1.0.3"
 description = "The context compression protocol for LLM inference. Eliminate 93% token redundancy in one line."
 readme = "README.md"
 authors = [{name = "Usama Fateh Ali", email = "alifateh0919@gmail.com"}]
