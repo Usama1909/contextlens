@@ -1,2 +1,8 @@
+*.json
+data/
 __pycache__/
-stats/*.json
+*.pyc
+.venv/
+venv/
+*.gz
+node_modules/
